@@ -1,0 +1,920 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Alert, TextInput, Modal } from 'react-native';
+import CheckBox from '@react-native-community/checkbox';
+
+import { useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Icon from 'react-native-vector-icons/FontAwesome';
+import HeightPicker from './HeightPicker'; // Adjust the path as needed
+import InchPicker from './InchPicker';
+import { Api } from '../providers/api/api';
+import { CreateCaseProvider } from '../providers/createcase/createcase';
+import { useLoader } from '../providers/loader/loader';
+import { InterneterrorProvider } from '../providers/interneterror/InternetErrorProvider';
+import Geolocation from '@react-native-community/geolocation';
+
+
+
+
+
+const CreateCaseScreen = () => {
+  const [knowPerson, setKnowPerson] = useState(false);
+  const [unknownPerson, setUnknownPerson] = useState(false);
+  const [visibleMark, setVisibleMark] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [lat, setLat] = useState<number | null>(null);
+  const [long, setLong] = useState<number | null>(null);
+  const [currentAddress, setCurrentAddress] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [gender, setGender] = useState('');
+  const [visible_marks_desc, setmarkDesk] = useState('');
+  const [skinTone, setSkinTone] = useState('');
+  const [eye_color, setEyeColor] = useState('');
+  const [hair_color, setHairColor] = useState('');
+  const [height, setHeight] = useState('');
+  const [inch, setInch] = useState('');
+  const [weight, setWeight] = useState('');
+  const [age, setAge] = useState('');
+  const [place, setPlace] = useState('');
+  const [clothing, setClothing] = useState('');
+  const [accent, setAccent] = useState('');
+  const [information, setInformation] = useState('');
+  
+  const [errors, setErrors] = useState({
+    firstName: '',
+    lastName: '',
+  });
+  const [isHeightPickerVisible, setIsHeightPickerVisible] = useState(false);
+  const [isInchPickerVisible, setIsInchPickerVisible] = useState(false);
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [visibleScarsMarksTattoos, setVisibleScarsMarksTattoos] = useState('');
+  const [hasVisibleScarsMarksTattoos, setHasVisibleScarsMarksTattoos] = useState(false);
+  const [showFooter, setShowFooter] = useState(true);
+ 
+  const navigation = useNavigation();
+  const { showLoader, hideLoader } = useLoader();
+  const internetErrorProvider = new InterneterrorProvider();
+  const api = new Api();
+  const createCaseProvider = new CreateCaseProvider(api);
+
+  const lastNameRef = useRef<TextInput>(null);
+  const skinToneRef = useRef<TextInput>(null);
+  const eyeColorRef = useRef<TextInput>(null);
+  const hairColorRef = useRef<TextInput>(null);
+  const weightRef = useRef<TextInput>(null);
+  const ageRef = useRef<TextInput>(null);
+  const placeRef = useRef<TextInput>(null);
+  const clothingRef = useRef<TextInput>(null);
+  const accentRef = useRef<TextInput>(null);
+  const informationRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    const loadUserData = async () => {
+      const user = await AsyncStorage.getItem('user');
+      if (user) {
+        const userObj = JSON.parse(user);
+        setUserId(userObj.user_id);
+        setToken(userObj.token);
+      }
+    };
+
+    const loadClientId = async () => {
+      const client_id = await AsyncStorage.getItem('client_id');
+      setClientId(client_id);
+    };
+
+    loadUserData();
+    loadClientId();
+    loadMap();
+  }, []);
+
+  const loadMap = () => {
+    Geolocation.getCurrentPosition(
+      (position) => {
+        setLat(position.coords.latitude);
+        setLong(position.coords.longitude);
+        getCurrentAddress(position.coords.latitude, position.coords.longitude);
+      },
+      (error) => console.log(error),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+    );
+  };
+
+  const getCurrentAddress = (latitude, longitude) => {
+  Geocoder.geocodePosition({ lat: latitude, lng: longitude })
+    .then(res => {
+      setCurrentAddress(res[0].locality);
+    })
+    .catch(err => console.log(err));
+};
+
+  const currentDate = () => {
+    const today = new Date();
+    const date = today.getFullYear() + '-' + (today.getMonth() + 1) + '-' + today.getDate();
+    const time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds();
+    return date + ' ' + time;
+  };
+
+  const showAlert = (result: string, msg: string) => {
+    Alert.alert(result, msg, [{ text: 'OK' }]);
+  };
+
+  const isCreateEnabled = (knowPerson && firstName && lastName) || 
+                          (unknownPerson && gender && skinTone && eye_color && hair_color && height && inch && weight && age && place && clothing && accent && information && visible_marks_desc);
+
+  const handleSelectHeight = (selectedHeight) => {
+    setHeight(selectedHeight);
+    setIsHeightPickerVisible(false);
+  };
+
+  const handleSelectInch = (selectedInch) => {
+    setInch(selectedInch);
+    setIsInchPickerVisible(false);
+  };
+
+  const handleWeightChange = (text) => {
+    if (/^\d*$/.test(text)) {
+      setWeight(text);
+    }
+  };
+
+  const handleAgeChange = (text) => {
+    if (/^\d*$/.test(text)) {
+      setAge(text);
+    }
+  };
+
+  const handleFirstNameChange = (text) => {
+    setFirstName(text);
+  };
+
+  const handleLastNameChange = (text) => {
+    setLastName(text);
+  };
+
+  const handleCreate = () => {
+    if (knowPerson) {
+      handleSubmitKnown();
+    } else if (unknownPerson) {
+      handleSubmitUnknown();
+    } else {
+      Alert.alert('Error', 'Please select a known or unknown person');
+    }
+  };
+
+  const handleBlur = (fieldName, value) => {
+    if (!value) {
+      setErrors(prevErrors => ({
+        ...prevErrors,
+        [fieldName]: `${fieldName.replace(/([A-Z])/g, ' $1').toLowerCase()} cannot be empty`
+      }));
+    }
+  };
+
+  const checkIfAllFieldsAreFilled = () => {
+    setIsCreateEnabled(
+      firstName && lastName && !errors.firstName && !errors.lastName
+    );
+  };
+
+  const handleSubmitKnown = () => {
+    const suspect_info = {
+      suspect_name: firstName,
+      last_name: lastName,
+      known: 1,
+      token: token,
+      race: '',
+      height: '',
+      weight: '',
+      age: '',
+      visible_marks: hasVisibleScarsMarksTattoos ? 1 : 0,
+      visible_marks_desc: '',
+      hair_color: '',
+      eye_color: '',
+      place_of_incident: currentAddress,
+      distinguishing_clothing: '',
+      accent: '',
+      additional_info: '',
+      date: currentDate(),
+      client_id: clientId,
+      user_id: userId,
+      lat: lat,
+      long: long,
+    };
+
+    showLoader();
+    createCaseProvider.createCase(suspect_info)
+      .then((res) => {
+        hideLoader();
+        if (res?.result === 'failed') {
+          if (res.msg === 'Your account is deactivated, please contact support.' || res.msg === 'Case not created') {
+            AsyncStorage.setItem('user', '');
+            navigation.reset({ index: 0, routes: [{ name: 'LoginPage' }] });
+          } else {
+            showAlert(res.result, res.msg);
+          }
+        } else if (res.msg === 'Case created successfully.') {
+          const suspect_info = {
+            suspect_name: res.suspect_name,
+            case_id: res.case_id,
+            last_name: res.last_name,
+          };
+          navigation.reset({ index: 0, routes: [{ name: 'AggressionMeterScreen', params: { suspect_info } }] });
+        }
+      })
+      .catch((err) => {
+        hideLoader();
+        internetErrorProvider.error();
+      });
+  };
+
+  const handleSubmitUnknown = () => {
+    const height_info = `${height},${inch}`;
+
+    const suspect_info = {
+      known: 0,
+      gender: gender,
+      race: skinTone,
+      height: height_info,
+      weight: weight,
+      age: age,
+      place_of_incident: place,
+      distinguishing_clothing: clothing,
+      accent: accent,
+      eye_color: eye_color,
+      hair_color: hair_color,
+      additional_info: information,
+      visible_marks:  hasVisibleScarsMarksTattoos ? 1 : 0,
+      visible_marks_desc: visible_marks_desc,
+      date: currentDate(),
+      token: token,
+      client_id: clientId,
+      user_id: userId,
+      lat: lat,
+      long: long,
+    };
+
+    showLoader();
+    createCaseProvider.createCase(suspect_info)
+      .then((res) => {
+        hideLoader();
+        if (res?.result === 'failed') {
+          if (res.msg === 'Your account is deactivated, please contact support.' || res.msg === 'Case not created') {
+            AsyncStorage.setItem('user', '');
+            navigation.reset({ index: 0, routes: [{ name: 'LoginPage' }] });
+          } else {
+            showAlert(res.result, res.msg);
+          }
+        } else if (res.msg === 'Case created successfully.') {
+          const suspect_info = {
+            suspect_name: res.suspect_name,
+            case_id: res.case_id,
+            last_name: res.last_name,
+          };
+          navigation.reset({ index: 0, routes: [{ name: 'AggressionMeterScreen', params: { suspect_info } }] });
+        }
+      })
+      .catch((err) => {
+        hideLoader();
+        internetErrorProvider.error();
+      });
+  };
+  const handleLogout = () => {
+    setLogoutModalVisible(false);
+    Alert.alert('Logged Out', 'You have been logged out.');
+  };
+
+  const handleLogoutCancel = () => {
+    setLogoutModalVisible(false);
+  };
+  const handleCheckboxChange = (type) => {
+    if (type === 'know') {
+      setKnowPerson(!knowPerson);
+      if (knowPerson) {
+        setFirstName('');
+        setLastName('');
+      }
+    } else if (type === 'unknown') {
+      setUnknownPerson(!unknownPerson);
+      if (unknownPerson) {
+        setGender('');
+        setSkinTone('');
+        setEyeColor('');
+        setHairColor('');
+        setHeight('');
+        setInch('');
+        setWeight('');
+        setAge('');
+        setPlace('');
+        setmarkDesk('');
+        setClothing('');
+        setAccent('');
+        setInformation('');
+      }
+    }
+  };
+  return (
+    
+    <View style={styles.container}>
+    <View style={styles.header}>
+      <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+        <Image source={require('../assets/img/backarrow.png')} style={styles.backIcon} />
+      </TouchableOpacity>
+      <Text style={styles.headerText}>Emerging Aggression</Text>
+    </View>
+   
+    <ScrollView  contentContainerStyle={styles.scrollContainer}>
+    <View style={styles.checkboxContainer}>
+     <View style={styles.checkboxWrapper}>
+      <CheckBox
+        value={knowPerson}
+        onValueChange={() => handleCheckboxChange('know')}
+        style={styles.checkbox}
+        disabled={unknownPerson}
+      />
+      <Text style={styles.label}>Known {'\n'}Person</Text>
+      </View>
+    
+    <View style={styles.checkboxWrapper}>
+      <CheckBox
+        value={unknownPerson}
+        onValueChange={() => handleCheckboxChange('unknown')}
+        disabled={knowPerson}
+      />
+      <Text style={styles.label}>Unknown  {'\n'} Person</Text>
+    </View>
+    </View>
+    <Text style={styles.ptext}>Insert details about the subject and case</Text>
+
+
+    {knowPerson && (
+      <View >
+        <View style={styles.inputContainer}>
+        <Image source={require('../assets/img/user.png')} style={styles.icon} />
+        <TextInput
+          style={styles.put}
+          placeholder="First Name"
+          value={firstName}
+          onChangeText={handleFirstNameChange}
+          onBlur={() => handleBlur('firstName', firstName)}
+        />
+        </View>
+        {errors.firstName ? <Text style={styles.errorText}>{errors.firstName}</Text> : null}
+        <View style={styles.inputContainer}>
+        <Image source={require('../assets/img/user.png')} style={styles.icon} />
+        <TextInput
+          style={styles.put}
+          placeholder="Last Name"
+          value={lastName}
+          onChangeText={handleLastNameChange}
+          onBlur={() => handleBlur('lastName', lastName)}
+        />
+        </View>
+        <View style={styles.buttonContainer}>
+            <TouchableOpacity
+              style={[styles.createButton, !isCreateEnabled && styles.disabledButton]}
+              disabled={!isCreateEnabled}
+              onPress={handleCreate}
+            >
+              <Text style={styles.createButtonText}>Create</Text>
+            </TouchableOpacity>
+          </View>
+        {errors.lastName ? <Text style={styles.errorText}>{errors.lastName}</Text> : null}
+      </View>
+      
+    )}
+
+   
+
+    {unknownPerson && (
+      <View style={styles.unknownPersonForm}>
+                    <View style={styles.genderContainer}>
+            <TouchableOpacity
+              style={[styles.genderOption, gender === 'male' && styles.selectedGenderOption]}
+              onPress={() => setGender('male')}
+            >
+              <Text style={[styles.genderLabel, gender === 'male' && styles.selectedGenderLabel]}>Male</Text>
+              <View style={[styles.radioCircle, gender === 'male' && styles.selectedRb]} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.genderOption, gender === 'female' && styles.selectedGenderOption]}
+              onPress={() => setGender('female')}
+            >
+              <Text style={[styles.genderLabel, gender === 'female' && styles.selectedGenderLabel]}>Female</Text>
+              <View style={[styles.radioCircle, gender === 'female' && styles.selectedRb]} />
+            </TouchableOpacity>
+          </View>
+          <View style={styles.inputContainer}>
+            <Image source={require('../assets/img/user.png')} style={styles.icon} />
+            <TextInput
+              style={styles.put}
+              placeholder="Skin Tone"
+              value={skinTone}
+              onChangeText={setSkinTone}
+              returnKeyType="next"
+              onSubmitEditing={() => eyeColorRef.current.focus()}
+              ref={skinToneRef}
+            />
+          </View>
+          <View style={styles.inputContainer}>
+            <Image source={require('../assets/img/user.png')} style={styles.icon} />
+            <TextInput
+              style={styles.put}
+              placeholder="Eye Color"
+              value={eye_color}
+              onChangeText={setEyeColor}
+              returnKeyType="next"
+              onSubmitEditing={() => hairColorRef.current.focus()}
+              ref={eyeColorRef}
+            />
+          </View>
+          <View style={styles.inputContainer}>
+            <Image source={require('../assets/img/user.png')} style={styles.icon} />
+            <TextInput
+              style={styles.put}
+              placeholder="Hair Color"
+              value={hair_color}
+              onChangeText={setHairColor}
+              returnKeyType="next"
+              onSubmitEditing={() => weightRef.current.focus()}
+              ref={hairColorRef}
+            />
+          </View>
+          <View style={styles.heightInchContainer}>
+      <TouchableOpacity
+        style={styles.buttonLikeInput}
+        onPress={() => setIsHeightPickerVisible(true)}
+      >
+                  <Text style={styles.buttonText}>Height</Text>
+        <Text style={styles.buttonText}>{height }</Text>
+        <Image source={require('../assets/img/dropdownarrow.png')} style={styles.dropdownIcon} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.buttonLikeInput}
+        onPress={() => setIsInchPickerVisible(true)}
+      >
+                <Text style={styles.buttonText}>Inch</Text>
+        <Text style={styles.buttonText}>{inch }</Text>
+        <Image source={require('../assets/img/dropdownarrow.png')} style={styles.dropdownIcon} />
+      </TouchableOpacity>
+    </View>
+       <View style={styles.inputContainer}>
+      <Image source={require('../assets/img/user.png')} style={styles.icon} />
+      <TextInput
+        style={styles.put}
+        placeholder="Approximate Weight (in pounds)"
+        value={weight}
+        onChangeText={handleWeightChange}
+        ref={weightRef}
+        returnKeyType="next"
+        keyboardType="numeric"
+        onSubmitEditing={() => ageRef.current.focus()}
+      />
+    </View>
+    <View style={styles.inputContainer}>
+      <Image source={require('../assets/img/user.png')} style={styles.icon} />
+      <TextInput
+        style={styles.put}
+        placeholder="Approximate Age"
+        value={age}
+        onChangeText={handleAgeChange}
+        ref={ageRef}
+        keyboardType="numeric"
+        returnKeyType="next"
+        onSubmitEditing={() => placeRef.current.focus()}
+      />
+    </View>
+    <View style={styles.checkboxWrapper}>
+            <CheckBox
+              value={hasVisibleScarsMarksTattoos}
+              onValueChange={setHasVisibleScarsMarksTattoos}
+              style={styles.checkbox}
+            />
+            <Text style={styles.label}>Visible Scars,Marks,Tattoos</Text>
+          </View>
+         
+          {hasVisibleScarsMarksTattoos && (
+  <View style={styles.inputContainer}>
+    <Image source={require('../assets/img/user.png')} style={styles.icon} />
+    <TextInput
+      style={styles.put}
+      placeholder="Visible scars, marks, tattoos"
+      value={visible_marks_desc}
+      multiline={true}
+      numberOfLines={5}
+      onChangeText={setmarkDesk}
+      returnKeyType="next"
+      onSubmitEditing={() => placeRef.current.focus()}
+    />
+  </View>
+)}
+    <View style={styles.inputContainer}>
+    <Image source={require('../assets/img/user.png')} style={styles.icon} />
+      <TextInput
+        style={styles.put}
+        placeholder="Place of incident"
+        value={place}
+        multiline={true}
+        numberOfLines={5}
+        onChangeText={setPlace}
+        ref={placeRef}
+        returnKeyType="next"
+        onSubmitEditing={() => clothingRef.current.focus()}
+      />
+    </View>
+    <View style={styles.inputContainer}>
+      <Image source={require('../assets/img/clothing.png')} style={styles.icon} />
+      <TextInput
+        style={styles.put}
+        placeholder="Distinguishing clothing"
+        value={clothing}
+        multiline={true}
+        numberOfLines={5}
+        onChangeText={setClothing}
+        ref={clothingRef}
+        returnKeyType="next"
+        onSubmitEditing={() => accentRef.current.focus()}
+      />
+    </View>
+    <View style={styles.inputContainer}>
+      <Image source={require('../assets/img/user.png')} style={styles.icon} />
+      <TextInput
+        style={styles.put}
+        placeholder="Accent"
+        value={accent}
+        multiline={true}
+        numberOfLines={5}
+        onChangeText={setAccent}
+        ref={accentRef}
+        returnKeyType="next"
+        onSubmitEditing={() => informationRef.current.focus()}
+      />
+    </View>
+    <View style={styles.inputContainer}>
+      <Image source={require('../assets/img/user.png')} style={styles.icon} />
+      <TextInput
+        style={styles.put}
+        placeholder="Additional Information"
+        value={information}
+        onChangeText={setInformation}
+        ref={informationRef}
+        multiline={true}
+        numberOfLines={5}
+        returnKeyType="done"
+      />
+    </View>
+    <View style={styles.buttonContainer}>
+      <TouchableOpacity
+      style={styles.createButton}
+      disabled={!isCreateEnabled}
+      onPress={handleCreate}
+    >
+      <Text style={styles.buttonText}>Create Case</Text>
+    </TouchableOpacity>
+    </View> 
+      </View>
+    )}
+
+    
+  </ScrollView>
+    {showFooter && (
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.footerButton} onPress={() => navigation.navigate('IntroductionScreen')}>
+          <Image source={require('../assets/img/home_icon.png')} style={styles.footerIcon} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.footerButton} onPress={() => navigation.navigate('Contacts')}>
+          <Image source={require('../assets/img/call_icon.png')} style={styles.footerIcon} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.footerButton} onPress={() => navigation.navigate('Contacts')}>
+          <Image source={require('../assets/img/Profile-icon.png')} style={styles.footerIcon} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.footerButton} onPress={() => navigation.navigate('Contacts')}>
+          <Image source={require('../assets/img/edit_icon.png')} style={styles.footerIcon} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.footerButton} onPress={() => setLogoutModalVisible(true)}>
+          <Image source={require('../assets/img/logout_icon.png')} style={styles.footerIcon} />
+        </TouchableOpacity>
+      </View>
+    )}
+     <Modal
+      animationType="slide"
+      transparent={true}
+      visible={logoutModalVisible}
+      onRequestClose={() => setLogoutModalVisible(false)}
+    >
+      <View style={styles.centeredView}>
+        <View style={styles.modalView}>
+          <Text style={styles.modalTitles}>Confirm Logout</Text>
+          <Text style={styles.modalText}>Are you sure you want to log out?</Text>
+          <View style={styles.modalButtonContainer}>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handleLogout}
+            >
+              <Text style={styles.modalButtonText}>Yes</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={handleLogoutCancel}
+            >
+              <Text style={styles.modalButtonText}>No</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+    
+  
+    <HeightPicker
+      visible={isHeightPickerVisible}
+      onSelect={handleSelectHeight}
+      onClose={() => setIsHeightPickerVisible(false)}
+    />
+
+    <InchPicker
+      visible={isInchPickerVisible}
+      onSelect={handleSelectInch}
+      onClose={() => setIsInchPickerVisible(false)}
+    />
+ 
+</View>
+);
+};
+
+
+
+const styles = StyleSheet.create({
+container: {
+  flex: 1,
+  backgroundColor: '#f2f2f2',
+},
+scrollContainer: {
+  flexGrow: 1,
+  padding: 16,
+  marginBottom:'30%',
+},
+header: {
+  height: 60,
+  backgroundColor: '#9d0808',
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingHorizontal: 10,
+},
+backButton: {
+  position: 'absolute',
+  left: 10,
+},
+backIcon: {
+  width: 24,
+  height: 24,
+  tintColor: 'white',
+},
+headerText: {
+  color: 'white',
+  fontSize: 20,
+  fontWeight: 'bold',
+},
+
+checkboxContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-around',
+  marginBottom: 20,
+  marginTop: 20,
+},
+checkbox: {
+  marginRight: 8,
+},
+label: {
+  fontSize: 16,
+  marginLeft: 10,
+},
+input: {
+  height: 40,
+  borderColor: '#ccc',
+  borderWidth: 1,
+  borderRadius: 5,
+  marginBottom: 15,
+  paddingHorizontal: 10,
+  backgroundColor: 'white',
+},
+submitButton: {
+  backgroundColor: '#9d0808',
+  paddingVertical: 12,
+  paddingHorizontal: 20,
+  borderRadius: 8,
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginVertical: 10,
+},
+submitButtonText: {
+  color: 'white',
+  fontSize: 16,
+  fontWeight: 'bold',
+  textTransform: 'uppercase',
+},
+genderContainer: {
+  flexDirection: 'row',
+  justifyContent: 'space-between',
+  marginBottom: 20,
+  
+},
+genderOption: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flex: 1,
+  borderWidth: 1,
+  borderColor: '#ddd',
+  padding: 10,
+  borderRadius: 5,
+  marginHorizontal: 5,
+  backgroundColor:'#fff'
+  
+  
+},
+selectedGenderOption: {
+  //backgroundColor: '',
+  
+},
+genderLabel: {
+  fontSize: 18,
+  marginRight: 50,
+  color: 'black',
+},
+selectedGenderLabel: {
+  color: '#9d0808',
+},
+radioCircle: {
+  height: 20,
+  width: 20,
+  borderRadius: 10,
+  borderWidth: 2,
+  borderColor: 'black',
+  alignItems: 'center',
+  justifyContent: 'center',
+  marginLeft:10
+},
+selectedRb: {
+  width: 12,
+  height: 12,
+  borderRadius: 6,
+  borderColor:'#9d0808',
+  backgroundColor: '#9d0808',
+},
+icon: {
+  position: 'absolute',
+  left: 10,
+  width: 15,
+  height: 15,
+  marginTop:24,
+  tintColor:'#9d0808'
+},
+put: {
+  flex: 1,
+  fontSize: 16,
+  color: 'grey',
+  textAlignVertical: 'top',
+  paddingLeft: 40,
+  marginLeft:20,
+},
+inputContainer: {
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  marginBottom: 20,
+  borderWidth: 1,
+  borderColor: '#ddd',
+  borderRadius: 5,
+  padding: 10,
+  backgroundColor:'#fff'
+},
+
+heightInchContainer: {
+flexDirection: 'row',
+justifyContent: 'space-between',
+marginBottom: 20,
+
+},
+buttonLikeInput: {
+flexDirection: 'row',
+alignItems: 'center',
+borderWidth: 1,
+borderColor: '#ddd',
+borderRadius: 5,
+paddingVertical: 10,
+paddingHorizontal: 15,
+flex: 1,
+marginRight: 10,
+backgroundColor:'#fff',
+marginLeft:5
+},
+buttonText: {
+fontSize: 16,
+color: 'grey',
+flex: 1,
+},
+dropdownIcon: {
+width: 16,
+height: 16,
+tintColor: 'grey',
+},
+checkboxWrapper: {
+flexDirection: 'row',
+alignItems: 'center',
+marginBottom: 20,
+},
+buttonContainer: {
+alignItems: 'center',
+marginTop: 20,
+marginBottom: 60,
+},
+createButton: {
+backgroundColor: '#9d0808',
+borderRadius: 5,
+paddingVertical: 15,
+paddingHorizontal: 30,
+width: 200, // Set your desired width here
+alignItems: 'center', // Center the text horizontally
+justifyContent: 'center', // Center the text vertically
+},
+disabledButton: {
+opacity: 0.5,
+},
+createButtonText: {
+color: '#fff',
+fontSize: 16,
+fontWeight: 'Bold',
+},
+footer: {
+height: 60,
+backgroundColor: '#b71c1c',
+flexDirection: 'row',
+justifyContent: 'space-around',
+alignItems: 'center',
+position: 'absolute',
+bottom: 0,
+  width: '100%',
+},
+footerButton: {
+justifyContent: 'center',
+alignItems: 'center',
+},
+footerIcon: {
+width: 24,
+height: 24,
+tintColor: 'white',
+},
+centeredView: {
+flex: 1,
+justifyContent: 'center',
+alignItems: 'center',
+},
+modalView: {
+margin: 20,
+backgroundColor: 'white',
+borderRadius: 10,
+padding: 35,
+alignItems: 'center',
+shadowColor: '#000',
+shadowOffset: { width: 0, height: 2 },
+shadowOpacity: 0.25,
+shadowRadius: 4,
+elevation: 5,
+zIndex: 1000,
+},
+modalTitles: {
+fontSize: 18,
+fontWeight: 'bold',
+marginBottom: 15,
+},
+modalText: {
+fontSize: 16,
+marginBottom: 15,
+},
+modalButtonContainer: {
+flexDirection: 'row',
+},
+modalButton: {
+borderRadius: 5,
+padding: 10,
+marginHorizontal: 10,
+backgroundColor: '#9d0808',
+},
+modalButtonText: {
+color: 'white',
+fontSize: 16,
+},
+ptext: {
+  fontSize: 18,
+  marginBottom: 20,
+  fontWeight:'bold',
+  textAlign:'center',
+},
+});
+
+export default CreateCaseScreen;
+
+
+     
